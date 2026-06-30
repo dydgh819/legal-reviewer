@@ -160,9 +160,9 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
       </div>
     </div>
     <div class="mbody">
-      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:9px" for="aki">Claude API Key를 입력하세요</label>
-      <input id="aki" type="password" placeholder="sk-ant-••••••••••••••••••••" style="width:100%;border:1px solid var(--brd);border-radius:8px;padding:11px 14px;font-size:14px;letter-spacing:.05em" onkeydown="if(event.key==='Enter')submitKey()">
-      <div style="font-size:11px;color:var(--tm);margin-top:8px">console.anthropic.com 에서 발급받을 수 있습니다</div>
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:9px" for="aki">Gemini API Key를 입력하세요</label>
+      <input id="aki" type="password" placeholder="AIza••••••••••••••••••••••••••••••••••••" style="width:100%;border:1px solid var(--brd);border-radius:8px;padding:11px 14px;font-size:14px;letter-spacing:.05em" onkeydown="if(event.key==='Enter')submitKey()">
+      <div style="font-size:11px;color:var(--tm);margin-top:8px">aistudio.google.com 에서 무료로 발급받을 수 있습니다</div>
       <div id="kerr" class="kerr"></div>
       <button id="keySubmitBtn" onclick="submitKey()" style="width:100%;margin-top:14px;color:#fff;background:var(--or);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s">시작하기</button>
     </div>
@@ -188,7 +188,7 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
       <button class="nb" data-t="tg" onclick="sw('tg')">공정 설정</button>
     </nav>
     <div class="sb-kf">
-      <span style="font-size:11px;color:var(--tm)">Claude API Key</span>
+      <span style="font-size:11px;color:var(--tm)">Gemini API Key</span>
       <button class="kchg" onclick="openKeyModal()">변경</button>
     </div>
   </aside>
@@ -352,7 +352,7 @@ const DEFPROCS = [
 
 // ── 상태 ──────────────────────────────────────────────────
 const S = {
-  key: localStorage.getItem('hw_key') || '',
+  key: localStorage.getItem('gm_key') || '',
   hist: [],   // Firestore에서 로드
   docs: [],   // Firestore에서 로드
   procs: [],  // Firestore에서 로드 (비어 있으면 기본값 시드)
@@ -513,10 +513,10 @@ async function runReview(){
   if(S.docs.length){msg+='\n\n[등록된 법규 문서]\n'+S.docs.map(d=>`- ${d.name} (${d.cat})`).join('\n');}
   setRV('streaming');document.getElementById('st').textContent='';S.raw='';S.abort=new AbortController();
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${S.key}`,{
       method:'POST',
-      headers:{'x-api-key':S.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,stream:true,system:SYS,messages:[{role:'user',content:msg}]}),
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({system_instruction:{parts:[{text:SYS}]},contents:[{role:'user',parts:[{text:msg}]}],generationConfig:{maxOutputTokens:4096}}),
       signal:S.abort.signal,
     });
     if(!r.ok){let em=`HTTP ${r.status}`;try{const j=await r.json();em=j.error?.message||em;}catch{}throw new Error(em);}
@@ -527,8 +527,8 @@ async function runReview(){
       const lines=buf.split('\n');buf=lines.pop()||'';
       for(const ln of lines){
         if(!ln.startsWith('data: '))continue;
-        const d=ln.slice(6).trim();if(d==='[DONE]')continue;
-        try{const ev=JSON.parse(d);if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){S.raw+=ev.delta.text;document.getElementById('st').textContent=S.raw;}}catch{}
+        const d=ln.slice(6).trim();
+        try{const ev=JSON.parse(d);const chunk=ev.candidates?.[0]?.content?.parts?.[0]?.text;if(chunk){S.raw+=chunk;document.getElementById('st').textContent=S.raw;}}catch{}
       }
     }
     showDone();
@@ -749,13 +749,9 @@ async function submitKey(){
   const errEl=document.getElementById('kerr');
   btn.textContent='확인 중…';btn.disabled=true;errEl.style.display='none';
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'x-api-key':v,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1,messages:[{role:'user',content:'hi'}]}),
-    });
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${v}`);
     if(!r.ok){let em=`오류 코드 ${r.status}`;try{const j=await r.json();em=j.error?.message||em;}catch{}throw new Error(em);}
-    S.key=v;localStorage.setItem('hw_key',v);
+    S.key=v;localStorage.setItem('gm_key',v);
     document.getElementById('modal').style.display='none';
     toast('API 키가 설정되었습니다');
   }catch(err){
