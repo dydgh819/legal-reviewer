@@ -513,7 +513,7 @@ async function runReview(){
   if(S.docs.length){msg+='\n\n[등록된 법규 문서]\n'+S.docs.map(d=>`- ${d.name} (${d.cat})`).join('\n');}
   setRV('streaming');document.getElementById('st').textContent='';S.raw='';S.abort=new AbortController();
   try{
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${S.key}`,{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${S.key}`,{
       method:'POST',
       headers:{'content-type':'application/json'},
       body:JSON.stringify({system_instruction:{parts:[{text:SYS}]},contents:[{role:'user',parts:[{text:msg}]}],generationConfig:{maxOutputTokens:4096}}),
