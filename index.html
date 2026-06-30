@@ -137,6 +137,10 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
 .mhead{position:relative;background:#FFF7ED;padding:26px 28px 22px;overflow:hidden}
 .mhc{position:relative;display:flex;align-items:center;gap:10px}
 .mbody{padding:24px 28px 26px}
+.sb-kf{margin-top:auto;padding:14px 16px;border-top:1px solid #F0ECE6;display:flex;align-items:center;justify-content:space-between}
+.kchg{font-size:11px;font-weight:600;color:var(--or);background:none;border:1px solid var(--orl);border-radius:6px;padding:4px 10px;cursor:pointer;transition:background .12s}
+.kchg:hover{background:#FFF7ED}
+.kerr{display:none;margin-top:10px;padding:10px 12px;background:#FEF2F2;border-radius:7px;font-size:12px;color:#DC2626;line-height:1.5}
 </style>
 </head>
 <body>
@@ -159,7 +163,8 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:9px" for="aki">Claude API Key를 입력하세요</label>
       <input id="aki" type="password" placeholder="sk-ant-••••••••••••••••••••" style="width:100%;border:1px solid var(--brd);border-radius:8px;padding:11px 14px;font-size:14px;letter-spacing:.05em" onkeydown="if(event.key==='Enter')submitKey()">
       <div style="font-size:11px;color:var(--tm);margin-top:8px">console.anthropic.com 에서 발급받을 수 있습니다</div>
-      <button onclick="submitKey()" style="width:100%;margin-top:18px;color:#fff;background:var(--or);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer">시작하기</button>
+      <div id="kerr" class="kerr"></div>
+      <button id="keySubmitBtn" onclick="submitKey()" style="width:100%;margin-top:14px;color:#fff;background:var(--or);border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s">시작하기</button>
     </div>
   </div>
 </div>
@@ -182,6 +187,10 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
       <button class="nb" data-t="td" onclick="sw('td')">법규 문서</button>
       <button class="nb" data-t="tg" onclick="sw('tg')">공정 설정</button>
     </nav>
+    <div class="sb-kf">
+      <span style="font-size:11px;color:var(--tm)">Claude API Key</span>
+      <button class="kchg" onclick="openKeyModal()">변경</button>
+    </div>
   </aside>
 
   <div id="content">
@@ -724,12 +733,36 @@ function toast(msg,type){
 }
 
 // ── API Key 모달 ──────────────────────────────────────────
-function submitKey(){
+function openKeyModal(){
+  document.getElementById('aki').value='';
+  document.getElementById('kerr').style.display='none';
+  const btn=document.getElementById('keySubmitBtn');
+  btn.textContent='시작하기';btn.disabled=false;
+  document.getElementById('modal').style.display='flex';
+  setTimeout(()=>document.getElementById('aki').focus(),80);
+}
+
+async function submitKey(){
   const v=document.getElementById('aki').value.trim();
   if(!v){toast('API 키를 입력해 주세요','err');return;}
-  S.key=v;localStorage.setItem('hw_key',v);
-  document.getElementById('modal').style.display='none';
-  toast('API 키가 설정되었습니다');
+  const btn=document.getElementById('keySubmitBtn');
+  const errEl=document.getElementById('kerr');
+  btn.textContent='확인 중…';btn.disabled=true;errEl.style.display='none';
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'x-api-key':v,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1,messages:[{role:'user',content:'hi'}]}),
+    });
+    if(!r.ok){let em=`오류 코드 ${r.status}`;try{const j=await r.json();em=j.error?.message||em;}catch{}throw new Error(em);}
+    S.key=v;localStorage.setItem('hw_key',v);
+    document.getElementById('modal').style.display='none';
+    toast('API 키가 설정되었습니다');
+  }catch(err){
+    errEl.textContent='유효하지 않은 API 키입니다. '+err.message;
+    errEl.style.display='block';
+    btn.textContent='다시 시도';btn.disabled=false;
+  }
 }
 
 // ── 초기화 ────────────────────────────────────────────────
@@ -745,7 +778,7 @@ window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['tr
 
 // 인라인 onclick을 위해 window에 노출
 Object.assign(window,{
-  sw,submitKey,onQI,runReview,stopReview,
+  sw,submitKey,openKeyModal,onQI,runReview,stopReview,
   copyRes,saveRes,regHist,
   setF,renderHist,openH,delH,
   trigUp,dov,dlv,ddrop,onFS,delDoc,
