@@ -141,7 +141,13 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
 .kchg{font-size:11px;font-weight:600;color:var(--or);background:none;border:1px solid var(--orl);border-radius:6px;padding:4px 10px;cursor:pointer;transition:background .12s}
 .kchg:hover{background:#FFF7ED}
 .kerr{display:none;margin-top:10px;padding:10px 12px;background:#FEF2F2;border-radius:7px;font-size:12px;color:#DC2626;line-height:1.5}
+.ext-ok{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#059669}
+.ext-ok::before{content:'';width:7px;height:7px;border-radius:50%;background:#059669;flex-shrink:0}
+.ext-no{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#D97706}
+.ext-no::before{content:'';width:7px;height:7px;border-radius:50%;background:#D97706;flex-shrink:0}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
@@ -275,7 +281,7 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
       </div>
       <input type="file" id="fi" accept=".pdf" style="display:none" onchange="onFS(event)">
       <div class="dtable">
-        <div class="dhead"><span>문서명</span><span>분류</span><span>등록일</span><span>페이지</span><span>활성</span><span>삭제</span></div>
+        <div class="dhead"><span>문서명</span><span>분류</span><span>등록일</span><span>페이지</span><span>텍스트 추출</span><span>삭제</span></div>
         <div id="dl"></div>
         <div class="stale-w" id="sw2">⚠ 일부 문서가 등록 후 180일 경과: 최신 법규 개정 여부 확인을 권장합니다</div>
       </div>
@@ -492,6 +498,11 @@ const SYS=`당신은 한화솔루션 안전보건팀의 법규 검토 보조 AI�
 
 참고 법규: 산업안전보건법(산안법), 고압가스 안전관리법(고법), 액화석유가스의 안전관리 및 사업법(액법), 에너지이용 합리화법(에너지법), 화학물질관리법(화관법)
 
+【중요】 사용자가 법규 문서 원문을 제공한 경우:
+- 반드시 해당 문서 내용만을 근거로 답변하십시오.
+- 법조문은 제공된 원문에서 그대로 인용하고, 문서에 없는 조항은 절대 생성하거나 추측하지 마십시오.
+- 문서에 관련 조항이 없는 경우 "제공된 문서에 해당 조항 없음"이라고 명시하십시오.
+
 반드시 아래 마크다운 형식으로만 답변하십시오:
 
 ## 요약
@@ -511,7 +522,19 @@ async function runReview(){
   if(!q){toast('문의 내용을 입력해 주세요','err');return;}
   if(!S.key){document.getElementById('modal').style.display='flex';return;}
   let msg=q;
-  if(S.docs.length){msg+='\n\n[등록된 법규 문서]\n'+S.docs.map(d=>`- ${d.name} (${d.cat})`).join('\n');}
+  const docsWithContent=S.docs.filter(d=>d.content&&d.content.trim().length>50);
+  if(docsWithContent.length){
+    msg+='\n\n【법규 문서 원문 — 반드시 아래 내용만을 근거로 답변하고 문서에 없는 조항은 생성하지 마십시오】\n';
+    let total=0;
+    for(const d of docsWithContent){
+      if(total>=180000)break;
+      const chunk=d.content.slice(0,180000-total);
+      msg+=`\n===== ${d.name} (${d.cat}) =====\n${chunk}\n`;
+      total+=chunk.length;
+    }
+  }else if(S.docs.length){
+    msg+='\n\n[등록된 법규 문서 목록]\n'+S.docs.map(d=>`- ${d.name} (${d.cat})`).join('\n');
+  }
   setRV('streaming');document.getElementById('st').textContent='';S.raw='';S.abort=new AbortController();
   try{
     const model=S.model||localStorage.getItem('gm_model')||'gemini-1.5-flash';
@@ -641,12 +664,31 @@ async function hF(f){
   else if(nm.includes('액화석유가스')||nm.includes('액법'))cat='액화석유가스법';
   else if(nm.includes('에너지'))cat='에너지법';
   else if(nm.includes('화관')||nm.includes('화학물질'))cat='화관법';
+  toast(`"${f.name}" 텍스트 추출 중…`);
   try{
+    // PDF 텍스트 추출 (PDF.js)
+    const ab=await f.arrayBuffer();
+    const pdfLib=window.pdfjsLib;
+    let content='';let numPages=0;
+    if(pdfLib){
+      const pdf=await pdfLib.getDocument({data:ab}).promise;
+      numPages=pdf.numPages;
+      for(let i=1;i<=numPages;i++){
+        const page=await pdf.getPage(i);
+        const tc=await page.getTextContent();
+        const pt=tc.items.map(it=>it.str).join(' ').replace(/\s+/g,' ').trim();
+        if(pt)content+=`\n[${i}페이지]\n${pt}`;
+      }
+      if(content.length>150000)content=content.slice(0,150000)+'\n...(용량 초과로 이하 생략)';
+    }
+    const extracted=content.trim().length>100;
+    if(!extracted&&pdfLib)toast('"'+f.name+'" 텍스트 추출 불가 — 스캔 이미지 PDF는 지원되지 않습니다','err');
     await addDoc(collection(db,'docs'),{
-      name:f.name,cat,date:today(),pages:'—',stale:false,
+      name:f.name,cat,date:today(),pages:numPages||'—',stale:false,
+      content:extracted?content:'',
       order:S.docs.length,createdAt:serverTimestamp(),
     });
-    toast(`${f.name} 등록 완료`);
+    if(extracted)toast(`"${f.name}" 등록 완료 (${numPages}p · 텍스트 추출됨)`);
   }catch(err){toast('업로드 실패: '+err.message,'err');}
 }
 
@@ -667,8 +709,8 @@ function renderDocs(){
       <span style="font-weight:500">${e(d.name)}</span>
       <span><span class="badge" style="${CS[d.cat]||'color:#5C5C5C;background:#F0ECE6'}">${e(d.cat)}</span></span>
       <span style="color:${d.stale?'#D97706':'var(--t2)'}">${e(d.date)}</span>
-      <span style="color:var(--t2)">${e(d.pages)}</span>
-      <span><span class="on-dot">ON</span></span>
+      <span style="color:var(--t2)">${d.pages||'—'}</span>
+      <span>${d.content&&d.content.length>50?'<span class="ext-ok">추출됨</span>':'<span class="ext-no">미추출</span>'}</span>
       <span><button onclick="delDoc('${d.id}')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--tm)">🗑</button></span>
     </div>`).join('');
 }
