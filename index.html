@@ -115,9 +115,16 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
 .sth{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
 .stitle{font-size:16px;font-weight:700;letter-spacing:-.01em}
 .stable{background:#fff;border:1px solid var(--brd);border-radius:10px;overflow:hidden}
-.sthr{display:grid;grid-template-columns:.9fr 1.5fr 1.5fr 1.5fr;padding:13px 22px;background:#FAF8F5;border-bottom:1px solid var(--brd);font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--tm)}
-.str{display:grid;grid-template-columns:.9fr 1.5fr 1.5fr 1.5fr;padding:15px 22px;border-bottom:1px solid #F0ECE6;align-items:center;font-size:13px}
+.sthr{display:grid;grid-template-columns:.9fr 1.5fr 1.5fr 1.5fr 130px;padding:13px 22px;background:#FAF8F5;border-bottom:1px solid var(--brd);font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--tm)}
+.str{display:grid;grid-template-columns:.9fr 1.5fr 1.5fr 1.5fr 130px;padding:12px 22px;border-bottom:1px solid #F0ECE6;align-items:center;font-size:13px;gap:4px}
 .str:last-child{border-bottom:none}
+.str.editing{background:#FFFBF5}
+.sinp{width:100%;border:1px solid var(--or);border-radius:6px;padding:6px 8px;font-size:12px;font-family:inherit;color:var(--t1);outline:none}
+.sinp:focus{box-shadow:0 0 0 2px rgba(232,119,34,.15)}
+.sact{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.sbtn-ok{font-size:11px;font-weight:600;color:#fff;background:var(--or);border:none;border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.sbtn-del{font-size:11px;font-weight:500;color:#DC2626;background:#FEF2F2;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.sbtn-sm{font-size:11px;font-weight:500;color:var(--t2);background:#fff;border:1px solid var(--brd);border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap}
 
 /* BUTTONS */
 .gbtn{font-size:13px;font-weight:500;color:var(--t2);background:#fff;border:1px solid var(--brd);border-radius:8px;padding:9px 16px;cursor:pointer}
@@ -298,7 +305,7 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
         </div>
       </div>
       <div class="stable">
-        <div class="sthr"><span>공정명</span><span>감지 키워드</span><span>주요 적용 법규</span><span>필수 확인 항목</span></div>
+        <div class="sthr"><span>공정명</span><span>감지 키워드</span><span>주요 적용 법규</span><span>필수 확인 항목</span><span>액션</span></div>
         <div id="stl"></div>
       </div>
     </div>
@@ -371,6 +378,7 @@ const S = {
   abort: null,
   ttimer: null,
   pendingProcs: null,
+  editIdx: null,
 };
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -743,19 +751,85 @@ async function resetSet(){
 }
 
 function addP(){
-  S.pendingProcs=[...getEditProcs(),{name:'새 공정',kw:'',laws:'',req:''}];
-  renderSet();toast('공정 행을 추가했습니다. 저장 버튼을 눌러 확정하세요.');
+  S.pendingProcs=[...getEditProcs(),{name:'',kw:'',laws:'',req:''}];
+  S.editIdx=S.pendingProcs.length-1;
+  renderSet();
+  document.getElementById('se_n')?.focus();
+}
+
+function startEdit(i){
+  if(!S.pendingProcs)S.pendingProcs=[...S.procs];
+  S.editIdx=i;
+  renderSet();
+  document.getElementById('se_n')?.focus();
+}
+
+function cancelEdit(){
+  // 새로 추가한 빈 행이면 제거
+  if(S.pendingProcs){
+    const p=S.pendingProcs[S.editIdx];
+    if(p&&!p.name&&!p.kw&&!p.laws&&!p.req)S.pendingProcs.splice(S.editIdx,1);
+    if(!S.pendingProcs.length)S.pendingProcs=null;
+  }
+  S.editIdx=null;
+  renderSet();
+}
+
+function confirmEdit(i){
+  const n=document.getElementById('se_n')?.value.trim();
+  const k=document.getElementById('se_k')?.value.trim();
+  const l=document.getElementById('se_l')?.value.trim();
+  const r=document.getElementById('se_r')?.value.trim();
+  if(!n){toast('공정명을 입력해 주세요','err');document.getElementById('se_n')?.focus();return;}
+  const list=[...getEditProcs()];
+  list[i]={...list[i],name:n,kw:k,laws:l,req:r};
+  S.pendingProcs=list;
+  S.editIdx=null;
+  renderSet();
+  toast('수정됐습니다. 상단 저장 버튼을 눌러 확정하세요.');
+}
+
+function delP(i){
+  const list=[...getEditProcs()];
+  const name=list[i]?.name||'공정';
+  list.splice(i,1);
+  S.pendingProcs=list;
+  if(S.editIdx===i)S.editIdx=null;
+  else if(S.editIdx!==null&&S.editIdx>i)S.editIdx--;
+  renderSet();
+  toast(`"${name}" 삭제됐습니다. 저장 버튼을 눌러 확정하세요.`);
 }
 
 function renderSet(){
   const list=getEditProcs();
-  document.getElementById('stl').innerHTML=list.map((p,i)=>`
-    <div class="str">
+  if(!list.length){
+    document.getElementById('stl').innerHTML='<div style="text-align:center;padding:32px;color:var(--tm);font-size:13px">공정이 없습니다. + 공정 추가 버튼으로 추가해 주세요.</div>';
+    return;
+  }
+  document.getElementById('stl').innerHTML=list.map((p,i)=>{
+    if(S.editIdx===i){
+      return `<div class="str editing">
+        <input class="sinp" id="se_n" value="${e(p.name)}" placeholder="공정명" onkeydown="if(event.key==='Enter')confirmEdit(${i});if(event.key==='Escape')cancelEdit()">
+        <input class="sinp" id="se_k" value="${e(p.kw)}" placeholder="키워드 (쉼표 구분)" onkeydown="if(event.key==='Escape')cancelEdit()">
+        <input class="sinp" id="se_l" value="${e(p.laws)}" placeholder="적용 법규" onkeydown="if(event.key==='Escape')cancelEdit()">
+        <input class="sinp" id="se_r" value="${e(p.req)}" placeholder="필수 확인 항목" onkeydown="if(event.key==='Enter')confirmEdit(${i});if(event.key==='Escape')cancelEdit()">
+        <span class="sact">
+          <button class="sbtn-ok" onclick="confirmEdit(${i})">확인</button>
+          <button class="sbtn-sm" onclick="cancelEdit()">취소</button>
+        </span>
+      </div>`;
+    }
+    return `<div class="str">
       <span style="font-weight:600">${e(p.name)}</span>
       <span style="color:var(--t2);font-size:12px">${e(p.kw)}</span>
       <span style="color:var(--t2);font-size:12px">${e(p.laws)}</span>
       <span style="color:var(--t2);font-size:12px">${e(p.req)}</span>
-    </div>`).join('');
+      <span class="sact">
+        <button class="sbtn-sm" onclick="startEdit(${i})">수정</button>
+        <button class="sbtn-del" onclick="delP(${i})">삭제</button>
+      </span>
+    </div>`;
+  }).join('');
 }
 
 // ── 탭 전환 ───────────────────────────────────────────────
@@ -853,7 +927,7 @@ Object.assign(window,{
   copyRes,saveRes,regHist,
   setF,renderHist,openH,delH,
   trigUp,dov,dlv,ddrop,onFS,delDoc,
-  addP,saveSet,resetSet,
+  addP,startEdit,cancelEdit,confirmEdit,delP,saveSet,resetSet,
   toast,
 });
 
