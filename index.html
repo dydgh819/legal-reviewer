@@ -89,15 +89,27 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
 .fb{font-size:14px;font-weight:500;color:var(--t2);background:#fff;border:1px solid var(--brd);border-radius:7px;padding:6px 13px;cursor:pointer;transition:all .1s}
 .fb.on{color:#fff;background:var(--or);border-color:var(--or);font-weight:600}
 .hc{font-size:15px;color:var(--tm);margin-left:auto;white-space:nowrap}
-.hl{display:flex;flex-direction:column;gap:12px}
-.hcard{background:#fff;border:1px solid var(--brd);border-radius:10px;padding:18px 22px}
-.hctop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.htitle{font-size:17px;font-weight:600;letter-spacing:-.01em}
-.hdate{font-size:14px;color:var(--tm);white-space:nowrap;flex-shrink:0}
-.hdesc{font-size:15px;line-height:1.65;color:var(--t2);margin:8px 0 12px}
-.hfooter{display:flex;align-items:center;gap:7px}
-.hacts{margin-left:auto;display:flex;gap:8px}
+.htable{background:#fff;border:1px solid var(--brd);border-radius:10px;overflow:hidden}
+.hhead{display:grid;grid-template-columns:2.4fr 1.3fr .9fr 1fr;padding:13px 22px;background:#FAF8F5;border-bottom:1px solid var(--brd);font-size:13px;font-weight:600;letter-spacing:.03em;color:var(--tm)}
+.hrow{display:grid;grid-template-columns:2.4fr 1.3fr .9fr 1fr;padding:14px 22px;border-bottom:1px solid #F0ECE6;align-items:center;font-size:15px;gap:8px}
+.hrow:last-child{border-bottom:none}
+.htitle{font-size:15px;font-weight:600;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.htags{display:flex;gap:5px;flex-wrap:wrap}
+.hdate{font-size:14px;color:var(--tm);white-space:nowrap}
+.hacts{display:flex;gap:8px}
 .smbtn{font-size:14px;font-weight:500;color:var(--t2);background:#fff;border:1px solid var(--brd);border-radius:6px;padding:5px 14px;cursor:pointer}
+
+/* HISTORY DETAIL */
+#thd.on{padding:28px 32px 64px;overflow-y:auto}
+.hdtop{display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap}
+.hdback{font-size:14px;font-weight:600;color:var(--t2);background:#fff;border:1px solid var(--brd);border-radius:7px;padding:7px 14px;cursor:pointer}
+.hdmeta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hdtitle{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.hdsec{background:#fff;border:1px solid var(--brd);border-radius:12px;margin-bottom:18px;overflow:hidden}
+.hdshead{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #F0ECE6;gap:10px;flex-wrap:wrap}
+.hdslabel{font-size:15px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.hdq{padding:18px 22px;font-size:16px;line-height:1.7;white-space:pre-wrap;color:var(--t1);background:#FAF8F5}
+.hdbody{padding:22px}
 
 /* DOCS */
 #td.on{padding:28px 32px 64px;overflow-y:auto}
@@ -278,7 +290,37 @@ nav{display:flex;flex-direction:column;padding:14px 12px;gap:3px}
         </div>
         <span class="hc" id="hcnt">총 0건</span>
       </div>
-      <div class="hl" id="hl"></div>
+      <div class="htable">
+        <div class="hhead"><span>제목</span><span>적용 법규</span><span>등록일</span><span>액션</span></div>
+        <div id="hl"></div>
+      </div>
+    </div>
+
+    <!-- HISTORY DETAIL -->
+    <div id="thd" class="tab">
+      <div class="hdtop">
+        <button class="hdback" onclick="closeHistDetail()">← 목록으로</button>
+        <div class="hdmeta">
+          <span class="hdtitle" id="hdTitle"></span>
+          <span class="hdate" id="hdDate"></span>
+          <span class="htags" id="hdTags"></span>
+        </div>
+        <button class="gbtn" style="margin-left:auto;color:#DC2626" onclick="deleteHistDetail()">삭제</button>
+      </div>
+      <div class="hdsec">
+        <div class="hdshead">
+          <span class="hdslabel"><span class="iaccent"></span>문의 내용</span>
+          <button class="gbtn" onclick="reuseHistQuestion()">이 질문으로 다시 검토</button>
+        </div>
+        <div class="hdq" id="hdQuestion"></div>
+      </div>
+      <div class="hdsec">
+        <div class="hdshead">
+          <span class="hdslabel"><span class="iaccent"></span>검토 결과</span>
+          <button class="gbtn" onclick="copyHistContent()">복사</button>
+        </div>
+        <div class="hdbody" id="hdContent"></div>
+      </div>
     </div>
 
     <!-- DOCS -->
@@ -482,6 +524,16 @@ function detect(t){
   return{procs,laws};
 }
 
+// 질문 첫 문장 + 감지된 공정명을 조합해 제목을 생성한다.
+// (재호출 없이 즉시 생성 — 이미 onQI()에서 계산된 S.dprocs를 재사용)
+function deriveTitle(q){
+  let s=q.trim().split(/[\n.!?]/)[0].trim();
+  if(!s)s=q.trim();
+  const prefix=S.dprocs.length?`[${S.dprocs[0]}] `:'';
+  const body=s.length>30?s.slice(0,30)+'…':s;
+  return prefix+body;
+}
+
 function onQI(){
   const t=document.getElementById('qi').value;
   const{procs,laws}=detect(t);
@@ -623,12 +675,10 @@ function saveRes(){
 async function regHist(){
   const q=document.getElementById('qi').value.trim();
   if(!q||!S.raw){toast('저장할 검토 결과가 없습니다','err');return;}
-  const title=q.length>40?q.slice(0,40)+'…':q;
-  const summary=S.raw.split('\n').filter(l=>l&&!l.startsWith('#'))[0]||'';
   try{
     await addDoc(collection(db,'history'),{
-      title,date:today(),
-      desc:summary.slice(0,150),
+      title:deriveTitle(q),date:today(),
+      question:q,
       tags:S.dlaws.map(l=>l.l),
       content:S.raw,
       createdAt:serverTimestamp(),
@@ -648,7 +698,7 @@ function renderHist(){
   const q=(document.getElementById('hq')?.value||'').trim().toLowerCase();
   const items=S.hist.filter(it=>{
     const ok=hf==='all'||it.tags?.includes(hf);
-    const oq=!q||((it.title||'')+(it.desc||'')).toLowerCase().includes(q);
+    const oq=!q||((it.title||'')+(it.question||'')+(it.content||'')).toLowerCase().includes(q);
     return ok&&oq;
   });
   document.getElementById('hcnt').textContent=`총 ${items.length}건`;
@@ -660,23 +710,58 @@ function renderHist(){
     return;
   }
   document.getElementById('hl').innerHTML=items.map(it=>{
-    const bd=(it.tags||[]).map(t=>`<span class="badge" style="${CS[t]||'color:#5C5C5C;background:#F0ECE6'}">${e(t)}</span>`).join('');
-    return `<div class="hcard">
-      <div class="hctop"><div class="htitle">${e(it.title)}</div><div class="hdate">${e(it.date)}</div></div>
-      <p class="hdesc">${e(it.desc||'')}</p>
-      <div class="hfooter">${bd}<div class="hacts">
+    const bd=(it.tags||[]).map(t=>`<span class="badge" style="${CS[t]||'color:#5C5C5C;background:#F0ECE6'}">${e(t)}</span>`).join('')||'<span style="font-size:13px;color:var(--tm)">—</span>';
+    return `<div class="hrow">
+      <span class="htitle" title="${e(it.title)}">${e(it.title)}</span>
+      <span class="htags">${bd}</span>
+      <span class="hdate">${e(it.date)}</span>
+      <span class="hacts">
         <button class="smbtn" onclick="openH('${it.id}')">열기</button>
         <button class="smbtn" style="color:var(--tm)" onclick="delH('${it.id}')">삭제</button>
-      </div></div>
+      </span>
     </div>`;
   }).join('');
 }
 
+let hdCurrent=null;
+
 function openH(id){
   const it=S.hist.find(h=>h.id===id);
-  if(!it||!it.content){toast('저장된 내용이 없습니다','err');return;}
-  S.raw=it.content;S.dlaws=LAW_KW.filter(l=>(it.tags||[]).includes(l.l));S.dprocs=[];
-  sw('tr');showDone();
+  if(!it){toast('기록을 찾을 수 없습니다','err');return;}
+  hdCurrent=it;
+  document.getElementById('hdTitle').textContent=it.title||'';
+  document.getElementById('hdDate').textContent=it.date||'';
+  document.getElementById('hdTags').innerHTML=(it.tags||[]).map(t=>`<span class="badge" style="${CS[t]||'color:#5C5C5C;background:#F0ECE6'}">${e(t)}</span>`).join('');
+  document.getElementById('hdQuestion').textContent=it.question||'질문 내용이 저장되기 이전 기록입니다.';
+  document.getElementById('hdContent').innerHTML=it.content?md(it.content):'<div style="color:var(--tm);font-size:15px">저장된 검토 결과가 없습니다</div>';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('on'));
+  document.getElementById('thd').classList.add('on');
+}
+
+function closeHistDetail(){
+  hdCurrent=null;
+  sw('th');
+}
+
+function reuseHistQuestion(){
+  if(!hdCurrent?.question){toast('저장된 질문 내용이 없습니다','err');return;}
+  document.getElementById('qi').value=hdCurrent.question;
+  S.raw='';setRV('idle');
+  sw('tr');
+  onQI();
+  document.getElementById('qi').focus();
+}
+
+function copyHistContent(){
+  if(!hdCurrent?.content){toast('복사할 내용이 없습니다','err');return;}
+  navigator.clipboard.writeText(hdCurrent.content).then(()=>toast('클립보드에 복사했습니다')).catch(()=>toast('복사 실패','err'));
+}
+
+async function deleteHistDetail(){
+  if(!hdCurrent)return;
+  if(!confirm('이 히스토리 기록을 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.'))return;
+  try{await deleteDoc(doc(db,'history',hdCurrent.id));toast('기록을 삭제했습니다');closeHistDetail();}
+  catch(err){toast('삭제 실패: '+err.message,'err');}
 }
 
 async function delH(id){
@@ -962,6 +1047,7 @@ Object.assign(window,{
   sw,submitKey,openKeyModal,onQI,runReview,stopReview,
   copyRes,saveRes,regHist,
   setF,renderHist,openH,delH,
+  closeHistDetail,reuseHistQuestion,copyHistContent,deleteHistDetail,
   trigUp,dov,dlv,ddrop,onFS,delDoc,
   addP,startEdit,cancelEdit,confirmEdit,delP,saveSet,resetSet,
   toast,
