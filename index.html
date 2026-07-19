@@ -385,15 +385,15 @@ const CS = {
 };
 const PS = 'color:#E87722;background:#FFF7ED';
 
-// 법규 약어 코드(히스토리 태그/필터/배지 색상의 기준값) — 감지 자체는 아래
-// detect()에서 '공정 설정'(S.procs)의 감지 키워드/주요 적용 법규를 사용한다.
-// 정식 명칭/약어 어느 쪽으로 입력되어도 인식되도록 둘 다 매칭 대상에 포함한다.
+// 법규 약어 코드(히스토리 태그/필터/배지 색상의 기준값) — detect()에서
+// '공정 설정'(S.procs)의 감지 키워드/주요 적용 법규뿐 아니라 질문 원문 자체도
+// 함께 검사한다. 정식 명칭/약어/실무에서 흔히 쓰는 축약 표현을 모두 포함한다.
 const LAW_ALIASES=[
-  {code:'산안',names:['산안법','산안']},
-  {code:'고법',names:['고압가스법','고법']},
-  {code:'액법',names:['액화석유가스법','액법']},
-  {code:'에너지',names:['에너지법','에너지']},
-  {code:'화관',names:['화관법','화관']},
+  {code:'산안',names:['산업안전보건법','산안법','산안']},
+  {code:'고법',names:['고압가스 안전관리법','고압가스안전관리법','고압가스법','고압가스','고법']},
+  {code:'액법',names:['액화석유가스의 안전관리 및 사업법','액화석유가스법','액화석유가스','액법']},
+  {code:'에너지',names:['에너지이용 합리화법','에너지법','에너지']},
+  {code:'화관',names:['화학물질관리법','화관법','화관']},
 ];
 // 법규 문서 분류(doc.cat) → 법규 약어 코드 매핑 (hF()의 분류 로직과 동일한 기준)
 const CAT_CODE={'산안법':'산안','고압가스법':'고법','액화석유가스법':'액법','에너지법':'에너지','화관법':'화관'};
@@ -517,16 +517,17 @@ function md(text){
 }
 
 // ── 공정/법규 감지 ────────────────────────────────────────
-// '공정 설정'(S.procs)에 등록된 감지 키워드로 공정을 먼저 판별하고,
-// 그 공정에 매핑된 주요 적용 법규 텍스트에서 법규 약어 코드를 추출한다.
-// (하드코딩된 별도 키워드 목록이 아니라 공정 설정 화면의 값을 그대로 사용)
+// '공정 설정'(S.procs)에 등록된 감지 키워드로 공정을 먼저 판별한다.
+// 법규 코드는 (1) 매칭된 공정의 주요 적용 법규 텍스트와 (2) 질문 원문 자체를
+// 함께 검사해 추출한다 — 특정 공정 키워드 없이 법규명을 직접 언급하는 일반
+// 질문("고압가스 특정제조시설의 변경허가 기준" 등)도 놓치지 않기 위함이다.
 function parseKw(kw){
   return (kw||'').split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
 }
 function detect(t){
   const lo=t.toLowerCase();
   const procObjs=S.procs.filter(p=>parseKw(p.kw).some(k=>lo.includes(k.toLowerCase())));
-  const lawText=procObjs.map(p=>p.laws||'').join(' ');
+  const lawText=t+' '+procObjs.map(p=>p.laws||'').join(' ');
   const laws=LAW_ALIASES.filter(a=>a.names.some(n=>lawText.includes(n))).map(a=>({l:a.code,s:CS[a.code]||'color:#5C5C5C;background:#F0ECE6'}));
   return{procObjs,laws};
 }
@@ -633,10 +634,16 @@ async function runReview(){
   const docsWithContent=[...priorityDocs,...otherDocs];
   if(docsWithContent.length){
     msg+='\n\n【법규 문서 원문 — 반드시 아래 내용만을 근거로 답변하고 문서에 없는 조항은 생성하지 마십시오】\n';
+    const BUDGET=180000;
+    // 문서 하나(예: 분량이 큰 산안법 전문)가 예산을 통째로 소진하면 뒤 순서의
+    // 문서가 아예 프롬프트에 포함되지 못한다. 문서 수만큼 예산을 균등 배분한
+    // 상한을 놓믰, 우선순위가 밀린 문서라도 최소한의 원문은 항상 전달되게 한다.
+    const perDocCap=Math.max(15000,Math.floor(BUDGET/docsWithContent.length));
     let total=0;
     for(const d of docsWithContent){
-      if(total>=180000)break;
-      const chunk=d.content.slice(0,180000-total);
+      if(total>=BUDGET)break;
+      const cap=Math.min(perDocCap,BUDGET-total);
+      const chunk=d.content.slice(0,cap);
       msg+=`\n===== ${d.name} (${d.cat}) =====\n${chunk}\n`;
       total+=chunk.length;
     }
